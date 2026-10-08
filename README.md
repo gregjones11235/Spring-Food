@@ -57,7 +57,6 @@ docker compose exec db psql -U postgres -d onlineorder
 docker compose stop
 ```
 
-## 文档
+## 部署
 
-- [`OnlineOrder/SQL_and_Redis_lab.md`](OnlineOrder/SQL_and_Redis_lab.md)：订单中心的 SQL 优化与 Redis 进阶实验
-- `OnlineOrder/deploy.sh`：打包前端、构建镜像并部署到 AWS ECS
+`OnlineOrder/deploy.sh`：打包前端、构建镜像并部署到 AWS ECS

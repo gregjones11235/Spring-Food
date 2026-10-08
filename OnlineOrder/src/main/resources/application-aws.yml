@@ -1,0 +1,17 @@
+# AWS 部署专用配置：ECS 任务定义里设置 SPRING_PROFILES_ACTIVE=aws 时生效，覆盖 application.yml 的同名配置
+spring:
+  data:
+    redis:
+      cluster:
+        # ElastiCache Serverless 的 endpoint，形如 xxx.serverless.use2.cache.amazonaws.com:6379
+        nodes: ${REDIS_CLUSTER_ENDPOINT}
+      # Serverless 强制 TLS
+      ssl:
+        enabled: true
+
+
+server:
+  tomcat:
+    accesslog:
+      # 镜像里以非 root 用户运行，没有权限创建日志目录；线上日志统一看 CloudWatch
+      enabled: false

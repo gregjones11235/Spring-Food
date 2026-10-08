@@ -27,6 +27,10 @@ public class DevRunner implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) throws Exception {
+        // 多实例部署或 INIT_DB=never 时表里已经有这个用户，重复插入会撞唯一约束导致启动失败
+        if (customerService.getCustomerByEmail("foo@mail.com") != null) {
+            return;
+        }
         customerService.signUp("foo@mail.com", "123456", "Foo", "Bar");
     }
 }

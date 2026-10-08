@@ -1,12 +1,10 @@
-DROP TABLE IF EXISTS order_items;
-DROP TABLE IF EXISTS menu_items;
-DROP TABLE IF EXISTS restaurants;
-DROP TABLE IF EXISTS carts;
-DROP TABLE IF EXISTS authorities;
-DROP TABLE IF EXISTS customers;
+-- 全部表结构 + 种子数据。每次启动都会执行（spring.sql.init.mode），所以必须幂等：
+-- 只建不存在的表、只加不存在的列，种子数据只在表为空时插入，绝不删表删数据。
 
 
-CREATE TABLE customers
+-- ================= 用户、登录、购物车 =================
+
+CREATE TABLE IF NOT EXISTS customers
 (
     id         SERIAL PRIMARY KEY   NOT NULL,
     email      TEXT UNIQUE          NOT NULL,
@@ -15,9 +13,12 @@ CREATE TABLE customers
     first_name TEXT,
     last_name  TEXT
 );
+-- 订单中心用到的用户资料：phone 故意用 TEXT（见 SQL_and_Redis_lab.md Q3）
+ALTER TABLE customers ADD COLUMN IF NOT EXISTS phone TEXT;
+ALTER TABLE customers ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
 
 
-CREATE TABLE carts
+CREATE TABLE IF NOT EXISTS carts
 (
     id          SERIAL PRIMARY KEY NOT NULL,
     customer_id INTEGER UNIQUE     NOT NULL,
@@ -26,7 +27,9 @@ CREATE TABLE carts
 );
 
 
-CREATE TABLE restaurants
+-- ================= 餐厅、菜品 =================
+
+CREATE TABLE IF NOT EXISTS restaurants
 (
     id        SERIAL PRIMARY KEY NOT NULL,
     name      TEXT               NOT NULL,
@@ -34,9 +37,11 @@ CREATE TABLE restaurants
     image_url TEXT,
     phone     TEXT
 );
+-- 品类（Burgers、Chinese、Pizza……），报表按品类统计用
+ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS category TEXT;
 
 
-CREATE TABLE menu_items
+CREATE TABLE IF NOT EXISTS menu_items
 (
     id            SERIAL PRIMARY KEY NOT NULL,
     restaurant_id INTEGER            NOT NULL,
@@ -46,9 +51,12 @@ CREATE TABLE menu_items
     image_url     TEXT,
     CONSTRAINT fk_restaurant FOREIGN KEY (restaurant_id) REFERENCES restaurants (id) ON DELETE CASCADE
 );
+-- 仅限时特价菜品有库存，普通菜品为 NULL（Q10、Q21）
+ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS stock INTEGER;
 
 
-CREATE TABLE order_items
+-- 购物车里的菜品
+CREATE TABLE IF NOT EXISTS order_items
 (
     id           SERIAL PRIMARY KEY NOT NULL,
     menu_item_id INTEGER            NOT NULL,
@@ -58,19 +66,75 @@ CREATE TABLE order_items
     CONSTRAINT fk_cart FOREIGN KEY (cart_id) REFERENCES carts (id) ON DELETE CASCADE,
     CONSTRAINT fk_menu_item FOREIGN KEY (menu_item_id) REFERENCES menu_items (id) ON DELETE CASCADE
 );
+CREATE UNIQUE INDEX IF NOT EXISTS uq_order_items_cart_menu ON order_items (cart_id, menu_item_id);
 
 
-CREATE TABLE authorities
+CREATE TABLE IF NOT EXISTS authorities
 (
     id        SERIAL PRIMARY KEY NOT NULL,
     email     TEXT               NOT NULL,
     authority TEXT               NOT NULL,
     CONSTRAINT fk_customer FOREIGN KEY (email) REFERENCES customers (email) ON DELETE CASCADE
 );
+-- 登录时按 email 查权限。没有这个索引时，10 万用户下每次登录都要全表扫描，
+-- 删除用户时的级联检查也会逐个扫全表（批量删 10 万个生成用户要 90 多秒）
+CREATE INDEX IF NOT EXISTS idx_authorities_email ON authorities (email);
 
+
+-- 商家账号属于哪家餐厅。商家账号也是 customers 里的一行（同一套登录），权限是 ROLE_MERCHANT，没有购物车。
+-- email 是主键：一个商家账号只管一家店
+CREATE TABLE IF NOT EXISTS restaurant_staff
+(
+    email         TEXT PRIMARY KEY NOT NULL,
+    restaurant_id INTEGER          NOT NULL,
+    CONSTRAINT fk_staff_customer FOREIGN KEY (email) REFERENCES customers (email) ON DELETE CASCADE,
+    CONSTRAINT fk_staff_restaurant FOREIGN KEY (restaurant_id) REFERENCES restaurants (id) ON DELETE CASCADE
+);
+
+
+-- ================= 订单中心 =================
+-- 这里刻意不建任何二级索引，索引在各个优化步骤里按需添加（见 SQL_and_Redis_lab.md Q1–Q4）
+
+
+-- 浏览量：Redis 里 INCR，定时批量回写到这里
+CREATE TABLE IF NOT EXISTS menu_item_views
+(
+    menu_item_id INTEGER PRIMARY KEY NOT NULL,
+    views        BIGINT              NOT NULL DEFAULT 0,
+    CONSTRAINT fk_views_menu_item FOREIGN KEY (menu_item_id) REFERENCES menu_items (id) ON DELETE CASCADE
+);
+
+
+-- 正式订单。状态流转（只订餐，暂不含配送）：PAID → ACCEPTED → DONE / CANCELLED
+CREATE TABLE IF NOT EXISTS orders
+(
+    id            SERIAL PRIMARY KEY NOT NULL,
+    customer_id   BIGINT             NOT NULL,
+    restaurant_id INTEGER,
+    status        TEXT               NOT NULL DEFAULT 'PAID',
+    total_price   NUMERIC            NOT NULL,
+    version       INTEGER            NOT NULL DEFAULT 0,
+    created_at    TIMESTAMPTZ        NOT NULL DEFAULT now()
+);
+
+
+CREATE TABLE IF NOT EXISTS order_lines
+(
+    id           SERIAL PRIMARY KEY NOT NULL,
+    order_id     INTEGER            NOT NULL,
+    menu_item_id INTEGER            NOT NULL,
+    price        NUMERIC            NOT NULL,
+    quantity     INTEGER            NOT NULL,
+    CONSTRAINT fk_line_order FOREIGN KEY (order_id) REFERENCES orders (id) ON DELETE CASCADE,
+    CONSTRAINT fk_line_menu_item FOREIGN KEY (menu_item_id) REFERENCES menu_items (id)
+);
+
+
+-- ================= 种子数据：3 家餐厅、30 个菜品（表为空时才插入） =================
 
 INSERT INTO restaurants (name, address, image_url, phone)
-VALUES ('Burger King', '773 N Mathilda Ave, Sunnyvale, CA 94085',
+SELECT *
+FROM (VALUES ('Burger King', '773 N Mathilda Ave, Sunnyvale, CA 94085',
         'https://img.cdn4dd.com/cdn-cgi/image/fit=contain,width=1920,format=auto,quality=50/https://cdn.doordash.com/media/store%2Fheader%2F10171.png',
         '(408) 736-0101'),
        ('SGD Tofu House', '3450 El Camino Real #105, Santa Clara, CA 95051',
@@ -78,11 +142,13 @@ VALUES ('Burger King', '773 N Mathilda Ave, Sunnyvale, CA 94085',
         '(408) 261-3030'),
        ('Fashion Wok', '163 S Murphy Ave, Sunnyvale, CA 94086',
         'https://img.cdn4dd.com/cdn-cgi/image/fit=contain,width=1920,format=auto,quality=50/https://cdn.doordash.com/media/store%2Fheader%2F273997.jpg',
-        '(408) 739-8866');
+        '(408) 739-8866')) AS seed (name, address, image_url, phone)
+WHERE NOT EXISTS (SELECT 1 FROM restaurants);
 
 
 INSERT INTO menu_items (description, image_url, name, price, restaurant_id)
-VALUES ('Made with white meat chicken, our Chicken Fries are coated in a light crispy breading seasoned with savory spices and herbs.',
+SELECT *
+FROM (VALUES ('Made with white meat chicken, our Chicken Fries are coated in a light crispy breading seasoned with savory spices and herbs.',
         'https://img.cdn4dd.com/cdn-cgi/image/fit=contain,width=300,format=auto,quality=50/https://cdn.doordash.com/media/photos/f439436f-c5ab-47af-bac4-7b73ab60a24b-retina-large.jpg',
         'Chicken Fries - 9 Pc', 4.89, 1),
        ('Our Whopper Sandwich is a 1/4 lb* of savory flame-grilled beef topped with juicy tomatoes, fresh lettuce, creamy mayonnaise, ketchup, crunchy pickles, and sliced white onions on a soft sesame seed bun.',
@@ -171,4 +237,30 @@ VALUES ('Made with white meat chicken, our Chicken Fries are coated in a light c
         'Smashed Green Pepper, Chinese Eggplant & Preserved Egg', 11.99, 3),
        ('',
         'https://img.cdn4dd.com/cdn-cgi/image/fit=contain,width=1920,format=auto,quality=50/https://cdn.doordash.com/media/photos/a307e73d-dd12-4841-be14-6f5825a64c59-retina-large.jpg',
-        'Stir Fried A-Choy with Minced Garlic', 10.99, 3);
+        'Stir Fried A-Choy with Minced Garlic', 10.99, 3)) AS seed (description, image_url, name, price, restaurant_id)
+WHERE NOT EXISTS (SELECT 1 FROM menu_items);
+
+
+-- ================= 种子数据：原始餐厅的商家账号（已存在就跳过） =================
+-- 账号 merchant<餐厅id>@mail.com，密码 123456（下面是它的 BCrypt 哈希，和 gen_data.sh 里的相同）。
+-- 原始餐厅就是带图片的那几家；生成餐厅的商家账号 merchant<餐厅id>@gen.example 由 gen_data.sh 创建
+
+INSERT INTO customers (email, password, enabled, first_name)
+SELECT 'merchant' || id || '@mail.com', '{bcrypt}$2a$10$.d6VRj2ebrP0E/p6kdBbGuzCXB9qLGwTDKssefNE7VVWKX1dJ4wo2', TRUE, name
+FROM restaurants
+WHERE image_url IS NOT NULL
+ON CONFLICT (email) DO NOTHING;
+
+
+INSERT INTO authorities (email, authority)
+SELECT 'merchant' || r.id || '@mail.com', 'ROLE_MERCHANT'
+FROM restaurants r
+WHERE r.image_url IS NOT NULL
+  AND NOT EXISTS (SELECT 1 FROM authorities a WHERE a.email = 'merchant' || r.id || '@mail.com');
+
+
+INSERT INTO restaurant_staff (email, restaurant_id)
+SELECT 'merchant' || id || '@mail.com', id
+FROM restaurants
+WHERE image_url IS NOT NULL
+ON CONFLICT (email) DO NOTHING;

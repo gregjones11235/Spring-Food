@@ -32,8 +32,8 @@ const MyCart = () => {
   const onCheckOut = () => {
     setChecking(true);
     checkout()
-      .then(() => {
-        message.success("Successfully checkout");
+      .then((orderIds) => {
+        message.success(`Order placed: #${orderIds.join(", #")}`);
         setCartVisible(false);
       })
       .catch((err) => {
@@ -71,7 +71,7 @@ const MyCart = () => {
           >
             <Text
               strong={true}
-            >{`Total price: $${cartData?.total_price}`}</Text>
+            >{`Total price: $${(cartData?.total_price ?? 0).toFixed(2)}`}</Text>
             <div>
               <Button onClick={onCloseDrawer} style={{ marginRight: 8 }}>
                 Cancel
@@ -93,10 +93,10 @@ const MyCart = () => {
           itemLayout="horizontal"
           dataSource={cartData?.order_items}
           renderItem={(item) => (
-            <List.Item>
+            <List.Item extra={<Text strong>{`$${(item.price * item.quantity).toFixed(2)}`}</Text>}>
               <List.Item.Meta
                 title={item.menu_item_name}
-                description={`$${item.price}`}
+                description={`$${item.price} × ${item.quantity}`}
               />
             </List.Item>
           )}

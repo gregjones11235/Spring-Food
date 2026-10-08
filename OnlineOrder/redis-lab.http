@@ -1,0 +1,137 @@
+### Redis 练习通道（IntelliJ IDEA Ultimate 的 HTTP Client：点击每个请求左侧的 ▶ 运行）
+### 社区版没有这个功能，请改用 REDIS_LAB.md 里的 curl.exe 命令
+### 注意：这里的内容不能粘进 redis-cli，否则会一直返回 (nil)
+### 建议另开终端：docker compose exec redis redis-cli MONITOR
+
+@host = http://localhost:8080/lab/redis
+
+########## 第一部分：5 种类型 ##########
+
+### [1.1 String] 缓存：第一次 source=db，60 秒内再调 source=redis
+GET {{host}}/string/menu-item/2
+
+### [1.2 String] INCR 浏览量
+POST {{host}}/string/menu-item/2/view
+
+### [1.3 String] 10 秒内调第二次 acquired=false
+POST {{host}}/string/checkout-lock/1
+
+### [2 Hash] 购物车
+POST {{host}}/hash/cart/1/items/2
+
+###
+POST {{host}}/hash/cart/1/items/11
+
+###
+GET {{host}}/hash/cart/1
+
+###
+DELETE {{host}}/hash/cart/1
+
+### [3.1 List] 最近浏览
+POST {{host}}/list/recent/1/5
+
+### [3.2 List] 订单队列
+POST {{host}}/list/orders?order=order-1001
+
+###
+POST {{host}}/list/orders?order=order-1002
+
+### 先进先出：先取到 order-1001；队列空时会阻塞 5 秒
+POST {{host}}/list/orders/take
+
+### 非阻塞 RPOP：队列空时立刻返回
+POST {{host}}/list/orders/take?timeout=0
+
+### [4 Set] 收藏
+POST {{host}}/set/fav/1/2
+
+###
+POST {{host}}/set/fav/1/11
+
+###
+POST {{host}}/set/fav/2/11
+
+###
+GET {{host}}/set/fav/common?a=1&b=2
+
+### [5 Sorted Set] 热销榜
+POST {{host}}/zset/sold/11?qty=3
+
+###
+POST {{host}}/zset/sold/2?qty=5
+
+###
+POST {{host}}/zset/sold/20?qty=1
+
+###
+GET {{host}}/zset/top?n=5
+
+########## 第二部分：Redis + 数据库 ##########
+
+### [6 缓存一致性] 先缓存
+GET {{host}}/string/menu-item/2
+
+### 只改数据库、不删缓存
+PUT {{host}}/db/menu-item/2/price?price=99.99&evict=false
+
+### 仍然是旧价格 10.59
+GET {{host}}/string/menu-item/2
+
+### 改数据库并删缓存（顺便把价格改回去）
+PUT {{host}}/db/menu-item/2/price?price=10.59&evict=true
+
+###
+GET {{host}}/string/menu-item/2
+
+### [7 缓存穿透] 不缓存空值：每次都查数据库
+GET {{host}}/string/menu-item/9999?cacheNull=false
+
+### 缓存空值：第二次起 source=redis (空值标记)
+GET {{host}}/string/menu-item/9999
+
+### [8 浏览量回写] 先多调几次 1.2，再回写
+POST {{host}}/string/views/flush
+
+###
+GET {{host}}/db/views
+
+### [9 结账落库] 先用第 2 节往购物车加菜，再结账
+POST {{host}}/hash/cart/1/checkout
+
+###
+GET {{host}}/db/orders/1
+
+########## 第三部分：Stream ##########
+
+### [10.1] XADD 发 3 条消息
+POST {{host}}/stream/orders?order=order-1
+
+###
+POST {{host}}/stream/orders?order=order-2
+
+###
+POST {{host}}/stream/orders?order=order-3
+
+### [10.2] 两个厨师各拿一条
+POST {{host}}/stream/orders/read?consumer=chef-a
+
+###
+POST {{host}}/stream/orders/read?consumer=chef-b
+
+### [10.3] 查看待确认列表
+GET {{host}}/stream/orders/pending
+
+### 确认：把 id 换成 pending 里 chef-b 那条的 id
+POST {{host}}/stream/orders/ack/替换成消息id
+
+### [10.4] 接管闲置超过 10 秒的消息
+POST {{host}}/stream/orders/claim?consumer=chef-b&minIdleSeconds=10
+
+########## 清理 ##########
+
+### 只清 Redis 里的 lab:* key
+DELETE {{host}}/reset
+
+### 同时清空练习库的订单和浏览量
+DELETE {{host}}/reset?db=true

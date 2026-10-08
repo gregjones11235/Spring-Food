@@ -16,4 +16,7 @@ public interface CartRepository extends ListCrudRepository<CartEntity, Long> {
     @Modifying
     @Query("UPDATE carts SET total_price = :totalPrice WHERE id = :cartId")
     void updateTotalPrice(Long cartId, Double totalPrice);
+    @Modifying
+    @Query("UPDATE carts SET total_price = total_price + CAST(:delta AS NUMERIC) WHERE id = :cartId")
+    void addTotalPrice(Long cartId, Double delta);
 }

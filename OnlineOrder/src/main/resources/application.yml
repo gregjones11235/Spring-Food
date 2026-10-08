@@ -9,11 +9,50 @@ spring:
     driver-class-name: org.postgresql.Driver
   sql:
     init:
+      # 每次启动都执行建表脚本。脚本是幂等的（只建不存在的表、表为空才插种子数据），不会删数据
       mode: ${INIT_DB:always}
       schema-locations: "classpath:database-init.sql"
+  data:
+    redis:
+      # 本地和线上都用集群模式连接：本地是 docker compose 里的单节点集群，线上是 ElastiCache Serverless（见 application-aws.yml）
+      cluster:
+        nodes: ${REDIS_CLUSTER_NODES:localhost:6379}
+      # 超时设短：Redis 故障时二级缓存要尽快失败、降级，而不是让每个请求卡住
+      timeout: 500ms
+      connect-timeout: 1s
+      lettuce:
+        cluster:
+          refresh:
+            adaptive: true   # 集群拓扑变化（扩容、主从切换）时自动刷新路由
+            period: 60s      # 另外每 60 秒定期刷新一次
+
+
+# @Cacheable 的两级缓存：L1 是每个实例内存里的 Caffeine，L2 是共享的 Redis（见 cache.TwoLevelCacheManager）
+app:
   cache:
-    caffeine:
-      spec: expireAfterWrite=60s
+    l1-ttl: 60s
+    l1-max-size: 10000
+    l2-ttl: 10m
+    # Redis 出错后跳过 L2 的时长，期间只用 L1 + 数据库，避免每个请求都等 Redis 超时
+    l2-circuit-open: 30s
+  # 首页（/restaurants/menu）只展示近 30 天订单量最高的 N 家餐厅
+  home:
+    hot-restaurants: 20
+
+
+server:
+  tomcat:
+    # 访问日志：给 scripts/log_report.sh 分析用，写到 OnlineOrder/logs/access_log.log
+    # 字段：IP - 用户 [时间] "方法 URL 协议" 状态码 字节数 耗时ms（Tomcat 10 的 %D 是微秒，所以用 %{ms}T）
+    accesslog:
+      enabled: true
+      directory: ${user.dir}/logs
+      prefix: access_log
+      suffix: .log
+      file-date-format: ""
+      rotate: false
+      buffered: false
+      pattern: '%h %l %u %t "%r" %s %b %{ms}T'
 
 logging:
   level:

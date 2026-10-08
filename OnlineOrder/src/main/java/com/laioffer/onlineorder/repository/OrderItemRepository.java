@@ -16,7 +16,13 @@ public interface OrderItemRepository extends ListCrudRepository<OrderItemEntity,
     List<OrderItemEntity> getAllByCartId(Long cartId);
 
 
-    OrderItemEntity findByCartIdAndMenuItemId(Long cartId, Long menuItemId);
+    @Modifying
+    @Query("""
+            INSERT INTO order_items (menu_item_id, cart_id, price, quantity)
+            VALUES (:menuItemId, :cartId, :price, 1)
+            ON CONFLICT (cart_id, menu_item_id) DO UPDATE SET quantity = order_items.quantity + 1
+            """)
+    void addOne(Long cartId, Long menuItemId, Double price);
 
 
     @Modifying

@@ -3,10 +3,12 @@ package com.laioffer.onlineorder.controller;
 
 import com.laioffer.onlineorder.entity.MenuItemEntity;
 import com.laioffer.onlineorder.model.RestaurantDto;
+import com.laioffer.onlineorder.model.RestaurantPage;
 import com.laioffer.onlineorder.service.MenuItemService;
 import com.laioffer.onlineorder.service.RestaurantService;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 
@@ -30,6 +32,16 @@ public class MenuController {
     @GetMapping("/restaurant/{restaurantId}/menu")
     public List<MenuItemEntity> getMenuByRestaurant(@PathVariable("restaurantId") long restaurantId) {
         return menuItemService.getMenuItemsByRestaurantId(restaurantId);
+    }
+
+
+    // 前端首页用的餐厅列表：?keyword=&page=1&size=12
+    @GetMapping("/restaurants")
+    public RestaurantPage searchRestaurants(
+            @RequestParam(defaultValue = "") String keyword,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "12") int size) {
+        return restaurantService.searchRestaurants(keyword, page, size);
     }
 
 

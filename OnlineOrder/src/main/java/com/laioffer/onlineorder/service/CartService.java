@@ -17,6 +17,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 
 @Service
@@ -42,23 +45,8 @@ public class CartService {
     public void addMenuItemToCart(long customerId, long menuItemId) {
         CartEntity cart = cartRepository.getByCustomerId(customerId);
         MenuItemEntity menuItem = menuItemRepository.findById(menuItemId).get();
-        OrderItemEntity orderItem = orderItemRepository.findByCartIdAndMenuItemId(cart.id(), menuItem.id());
-
-
-        Long orderItemId;
-        int quantity;
-
-
-        if (orderItem == null) {
-            orderItemId = null;
-            quantity = 1;
-        } else {
-            orderItemId = orderItem.id();
-            quantity = orderItem.quantity() + 1;
-        }
-        OrderItemEntity newOrderItem = new OrderItemEntity(orderItemId, menuItemId, cart.id(), menuItem.price(), quantity);
-        orderItemRepository.save(newOrderItem);
-        cartRepository.updateTotalPrice(cart.id(), cart.totalPrice() + menuItem.price());
+        orderItemRepository.addOne(cart.id(), menuItemId, menuItem.price());
+        cartRepository.addTotalPrice(cart.id(), menuItem.price());
     }
 
     @Cacheable("cart")
@@ -78,10 +66,19 @@ public class CartService {
     }
 
 
+    // 原来在循环里逐个 findById，购物车 N 个菜就多发 N 条 SQL（N+1）。
+    // 改为一次 IN 查询取回全部菜品；IN 不保证返回顺序，所以先按 id 建 Map 再组装
     private List<OrderItemDto> getOrderItemDtos(List<OrderItemEntity> orderItems) {
+        if (orderItems.isEmpty()) {
+            return new ArrayList<>();
+        }
+        List<Long> menuItemIds = orderItems.stream().map(OrderItemEntity::menuItemId).distinct().toList();
+        Map<Long, MenuItemEntity> menuItems = menuItemRepository.findAllById(menuItemIds).stream()
+                .collect(Collectors.toMap(MenuItemEntity::id, Function.identity()));
+
         List<OrderItemDto> orderItemDtos = new ArrayList<>();
         for (OrderItemEntity orderItem : orderItems) {
-            MenuItemEntity menuItem = menuItemRepository.findById(orderItem.menuItemId()).get();
+            MenuItemEntity menuItem = menuItems.get(orderItem.menuItemId());
             OrderItemDto orderItemDto = new OrderItemDto(orderItem, menuItem);
             orderItemDtos.add(orderItemDto);
         }

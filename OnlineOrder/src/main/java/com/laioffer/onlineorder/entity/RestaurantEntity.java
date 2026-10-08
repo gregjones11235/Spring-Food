@@ -11,6 +11,7 @@ public record RestaurantEntity(
         String name,
         String address,
         String phone,
-        String imageUrl
+        String imageUrl,
+        String category
 ) {
 }

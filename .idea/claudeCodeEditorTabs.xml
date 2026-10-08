@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="ClaudeCodeEditorTabs">
+    <option name="activeSessionId" value="83a48055-ef04-4422-9c5a-89c5f9825995" />
+    <option name="openSessionIds">
+      <list>
+        <option value="f3daa2c9-4b81-4c5a-b0ae-7a9e22d4f72c" />
+        <option value="35e42620-828c-4466-ba82-681bbbe0dc98" />
+        <option value="83a48055-ef04-4422-9c5a-89c5f9825995" />
+      </list>
+    </option>
+    <option name="sessionPaths">
+      <map>
+        <entry key="35e42620-828c-4466-ba82-681bbbe0dc98" value="/sessions/a333a781-f834-427f-ba81-691385ff92e7" />
+        <entry key="83a48055-ef04-4422-9c5a-89c5f9825995" value="/sessions/113fbeaa-bed1-4740-8cbf-39f566b50703" />
+        <entry key="f3daa2c9-4b81-4c5a-b0ae-7a9e22d4f72c" value="/sessions/new" />
+      </map>
+    </option>
+    <option name="sessionTitles">
+      <map>
+        <entry key="35e42620-828c-4466-ba82-681bbbe0dc98" value="Jvm问题优化：想回答八股文被打断，说问的是实际使用怎么优化，打到了关于fullgc，空间分配，碎片" />
+        <entry key="83a48055-ef04-4422-9c5a-89c5f9825995" value="阅读REDIS_LAB.md文档，我现在需要完成“实验 5：ZSet”实验： 1. 当前数据是否支持" />
+        <entry key="f3daa2c9-4b81-4c5a-b0ae-7a9e22d4f72c" value="Claude Code" />
+      </map>
+    </option>
+  </component>
+</project>

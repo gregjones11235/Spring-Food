@@ -5,6 +5,7 @@ import com.laioffer.onlineorder.entity.MenuItemEntity;
 import org.springframework.data.repository.ListCrudRepository;
 
 
+import java.util.Collection;
 import java.util.List;
 
 
@@ -14,4 +15,7 @@ public interface MenuItemRepository extends ListCrudRepository<MenuItemEntity, L
 
 
     List<MenuItemEntity> getByRestaurantId(Long restaurantId);
+
+
+    List<MenuItemEntity> getByRestaurantIdIn(Collection<Long> restaurantIds);
 }
